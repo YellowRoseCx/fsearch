@@ -86,6 +86,9 @@ db_get_folders(FsearchDatabase *db);
 DynamicArray *
 db_get_files(FsearchDatabase *db);
 
+GList *
+db_get_excludes(FsearchDatabase *db);
+
 FsearchThreadPool *
 db_get_thread_pool(FsearchDatabase *db);
 
@@ -110,3 +113,6 @@ db_get_folders_sorted(FsearchDatabase *db, FsearchDatabaseIndexType sort_type);
 
 DynamicArray *
 db_get_files_sorted(FsearchDatabase *db, FsearchDatabaseIndexType sort_type);
+
+GList *
+db_get_excludes(FsearchDatabase *db);
