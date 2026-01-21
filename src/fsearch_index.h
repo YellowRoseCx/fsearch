@@ -33,3 +33,6 @@ fsearch_index_copy(FsearchIndex *index);
 
 void
 fsearch_index_free(FsearchIndex *index);
+
+FsearchIndex *
+fsearch_index_load(FILE *fp);

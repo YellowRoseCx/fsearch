@@ -619,10 +619,16 @@ db_load(FsearchDatabase *db, const char *file_path, void (*status_cb)(const char
     }
     g_debug("[db_load] folder size: %" PRIu64 ", file size: %" PRIu64, folder_block_size, file_block_size);
 
-    // TODO: implement index loading
     uint32_t num_indexes = 0;
     if (!read_element_from_file(&num_indexes, 4, fp)) {
         goto load_fail;
+    }
+    for (uint32_t i = 0; i < num_indexes; i++) {
+        FsearchIndex *index = fsearch_index_load(fp);
+        if (!index) {
+            goto load_fail;
+        }
+        db->indexes = g_list_append(db->indexes, index);
     }
 
     // TODO: implement exclude loading
@@ -956,13 +962,71 @@ static size_t
 db_save_indexes(FILE *fp, FsearchDatabase *db, bool *write_failed) {
     size_t bytes_written = 0;
 
-    // TODO: actually implement storing all index information
-    const uint32_t num_indexes = 0;
+    const uint32_t num_indexes = g_list_length(db->indexes);
     bytes_written += write_data_to_file(fp, &num_indexes, 4, 1, write_failed);
     if (*write_failed == true) {
         g_debug("[db_save] failed to save number of indexes: %d", num_indexes);
         goto out;
     }
+
+    if (num_indexes == 0) {
+        goto out;
+    }
+
+    for (GList *l = db->indexes; l != NULL; l = l->next) {
+        FsearchIndex *index = l->data;
+
+        const uint8_t type = index->type;
+        bytes_written += write_data_to_file(fp, &type, 1, 1, write_failed);
+        if (*write_failed == true) {
+            g_debug("[db_save] failed to save index type");
+            goto out;
+        }
+
+        const uint16_t path_len = strlen(index->path);
+        bytes_written += write_data_to_file(fp, &path_len, 2, 1, write_failed);
+        if (*write_failed == true) {
+            g_debug("[db_save] failed to save index path length");
+            goto out;
+        }
+
+        if (path_len > 0) {
+            bytes_written += write_data_to_file(fp, index->path, path_len, 1, write_failed);
+            if (*write_failed == true) {
+                g_debug("[db_save] failed to save index path");
+                goto out;
+            }
+        }
+
+        const uint8_t enabled = index->enabled;
+        bytes_written += write_data_to_file(fp, &enabled, 1, 1, write_failed);
+        if (*write_failed == true) {
+            g_debug("[db_save] failed to save index enabled flag");
+            goto out;
+        }
+
+        const uint8_t update = index->update;
+        bytes_written += write_data_to_file(fp, &update, 1, 1, write_failed);
+        if (*write_failed == true) {
+            g_debug("[db_save] failed to save index update flag");
+            goto out;
+        }
+
+        const uint8_t one_filesystem = index->one_filesystem;
+        bytes_written += write_data_to_file(fp, &one_filesystem, 1, 1, write_failed);
+        if (*write_failed == true) {
+            g_debug("[db_save] failed to save index one_filesystem flag");
+            goto out;
+        }
+
+        const int64_t last_updated = index->last_updated;
+        bytes_written += write_data_to_file(fp, &last_updated, 8, 1, write_failed);
+        if (*write_failed == true) {
+            g_debug("[db_save] failed to save index last_updated");
+            goto out;
+        }
+    }
+
 out:
     return bytes_written;
 }
