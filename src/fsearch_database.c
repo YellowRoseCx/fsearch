@@ -511,6 +511,51 @@ db_load_files(FILE *fp,
 }
 
 static bool
+db_load_excludes(FILE *fp, FsearchDatabase *db, uint32_t num_excludes) {
+    if (num_excludes == 0) {
+        return true;
+    }
+
+    if (db->excludes_hashtable) {
+        g_hash_table_remove_all(db->excludes_hashtable);
+    }
+    else {
+        db->excludes_hashtable = g_hash_table_new(g_str_hash, g_str_equal);
+    }
+    g_list_free_full(db->excludes, (GDestroyNotify)fsearch_exclude_path_free);
+    db->excludes = NULL;
+
+    for (uint32_t i = 0; i < num_excludes; i++) {
+        uint32_t path_len = 0;
+        if (!read_element_from_file(&path_len, 4, fp)) {
+            g_debug("[db_load] failed to load exclude path length");
+            return false;
+        }
+
+        g_autofree char *path = malloc(path_len + 1);
+        if (path_len > 0) {
+            if (!read_element_from_file(path, path_len, fp)) {
+                g_debug("[db_load] failed to load exclude path");
+                return false;
+            }
+        }
+        path[path_len] = '\0';
+
+        uint8_t enabled = 0;
+        if (!read_element_from_file(&enabled, 1, fp)) {
+            g_debug("[db_load] failed to load exclude enabled flag");
+            return false;
+        }
+
+        FsearchExcludePath *exclude = fsearch_exclude_path_new(path, enabled != 0);
+        db->excludes = g_list_append(db->excludes, exclude);
+        g_hash_table_insert(db->excludes_hashtable, exclude->path, exclude);
+    }
+
+    return true;
+}
+
+static bool
 db_load_sorted_entries(FILE *fp, DynamicArray *src, uint32_t num_src_entries, DynamicArray *dest) {
 
     g_autofree uint32_t *indexes = calloc(num_src_entries + 1, sizeof(uint32_t));
@@ -1138,7 +1183,6 @@ db_save(FsearchDatabase *db, const char *path) {
     }
 
     uint64_t file_block_size = 0;
-    const uint64_t file_block_size_offset = bytes_written;
     g_debug("[db_save] saving file block size...");
     bytes_written += write_data_to_file(fp, &file_block_size, 8, 1, &write_failed);
     if (write_failed == true) {
@@ -1549,6 +1593,12 @@ uint32_t
 db_get_num_entries(FsearchDatabase *db) {
     g_assert(db);
     return db_get_num_files(db) + db_get_num_folders(db);
+}
+
+GList *
+db_get_excludes(FsearchDatabase *db) {
+    g_assert(db);
+    return db->excludes;
 }
 
 void
