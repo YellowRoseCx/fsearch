@@ -52,7 +52,7 @@
 #define NUM_DB_ENTRIES_FOR_POOL_BLOCK 10000
 
 #define DATABASE_MAJOR_VERSION 0
-#define DATABASE_MINOR_VERSION 9
+#define DATABASE_MINOR_VERSION 10
 #define DATABASE_MAGIC_NUMBER "FSDB"
 
 struct FsearchDatabase {
@@ -632,6 +632,56 @@ db_load(FsearchDatabase *db, const char *file_path, void (*status_cb)(const char
         goto load_fail;
     }
 
+    if (num_excludes > 0) {
+        GList *loaded_excludes = NULL;
+        for (uint32_t i = 0; i < num_excludes; i++) {
+            uint32_t len = 0;
+            if (!read_element_from_file(&len, 4, fp)) {
+                g_list_free_full(loaded_excludes, (GDestroyNotify)fsearch_exclude_path_free);
+                goto load_fail;
+            }
+
+            char *path = malloc(len + 1);
+            if (!path) {
+                g_list_free_full(loaded_excludes, (GDestroyNotify)fsearch_exclude_path_free);
+                goto load_fail;
+            }
+
+            if (len > 0) {
+                if (!read_element_from_file(path, len, fp)) {
+                    free(path);
+                    g_list_free_full(loaded_excludes, (GDestroyNotify)fsearch_exclude_path_free);
+                    goto load_fail;
+                }
+            }
+            path[len] = '\0';
+
+            uint8_t enabled = 0;
+            if (!read_element_from_file(&enabled, 1, fp)) {
+                free(path);
+                g_list_free_full(loaded_excludes, (GDestroyNotify)fsearch_exclude_path_free);
+                goto load_fail;
+            }
+
+            FsearchExcludePath *ep = fsearch_exclude_path_new(path, (bool)enabled);
+            free(path);
+            loaded_excludes = g_list_prepend(loaded_excludes, ep);
+        }
+        loaded_excludes = g_list_reverse(loaded_excludes);
+
+        if (db->excludes) {
+            g_list_free_full(g_steal_pointer(&db->excludes), (GDestroyNotify)fsearch_exclude_path_free);
+        }
+        g_clear_pointer(&db->excludes_hashtable, g_hash_table_destroy);
+
+        db->excludes = loaded_excludes;
+        db->excludes_hashtable = g_hash_table_new(g_str_hash, g_str_equal);
+        for (GList *l = db->excludes; l != NULL; l = l->next) {
+            FsearchExcludePath *exclude_path = l->data;
+            g_hash_table_insert(db->excludes_hashtable, exclude_path->path, exclude_path);
+        }
+    }
+
     // pre-allocate the folders array so we can later map parent indices to the corresponding pointers
     sorted_folders[DATABASE_INDEX_TYPE_NAME] = darray_new(num_folders);
     folders = sorted_folders[DATABASE_INDEX_TYPE_NAME];
@@ -972,12 +1022,35 @@ static size_t
 db_save_excludes(FILE *fp, FsearchDatabase *db, bool *write_failed) {
     size_t bytes_written = 0;
 
-    // TODO: actually implement storing all exclude information
-    const uint32_t num_excludes = 0;
+    const uint32_t num_excludes = g_list_length(db->excludes);
     bytes_written += write_data_to_file(fp, &num_excludes, 4, 1, write_failed);
     if (*write_failed == true) {
-        g_debug("[db_save] failed to save number of indexes: %d", num_excludes);
+        g_debug("[db_save] failed to save number of excludes: %d", num_excludes);
         goto out;
+    }
+
+    for (GList *l = db->excludes; l != NULL; l = l->next) {
+        FsearchExcludePath *ep = l->data;
+        if (!ep || !ep->path) {
+            continue;
+        }
+
+        const uint32_t len = strlen(ep->path);
+        bytes_written += write_data_to_file(fp, &len, 4, 1, write_failed);
+        if (*write_failed == true) {
+            goto out;
+        }
+
+        bytes_written += write_data_to_file(fp, ep->path, 1, len, write_failed);
+        if (*write_failed == true) {
+            goto out;
+        }
+
+        const uint8_t enabled = ep->enabled ? 1 : 0;
+        bytes_written += write_data_to_file(fp, &enabled, 1, 1, write_failed);
+        if (*write_failed == true) {
+            goto out;
+        }
     }
 out:
     return bytes_written;
@@ -1042,14 +1115,14 @@ db_save(FsearchDatabase *db, const char *path) {
     DynamicArray *files = db->sorted_files[DATABASE_INDEX_TYPE_NAME];
     DynamicArray *folders = db->sorted_folders[DATABASE_INDEX_TYPE_NAME];
 
-    const uint32_t num_folders = darray_get_num_items(folders);
+    const uint32_t num_folders = folders ? darray_get_num_items(folders) : 0;
     g_debug("[db_save] saving number of folders: %d", num_folders);
     bytes_written += write_data_to_file(fp, &num_folders, 4, 1, &write_failed);
     if (write_failed == true) {
         goto save_fail;
     }
 
-    const uint32_t num_files = darray_get_num_items(files);
+    const uint32_t num_files = files ? darray_get_num_items(files) : 0;
     g_debug("[db_save] saving number of files: %d", num_files);
     bytes_written += write_data_to_file(fp, &num_files, 4, 1, &write_failed);
     if (write_failed == true) {
@@ -1599,6 +1672,12 @@ DynamicArray *
 db_get_files(FsearchDatabase *db) {
     g_assert(db);
     return db_get_files_sorted(db, DATABASE_INDEX_TYPE_NAME);
+}
+
+GList *
+db_get_excludes(FsearchDatabase *db) {
+    g_assert(db);
+    return db->excludes;
 }
 
 DynamicArray *
