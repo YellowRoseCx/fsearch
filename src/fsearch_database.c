@@ -533,6 +533,80 @@ db_load_sorted_entries(FILE *fp, DynamicArray *src, uint32_t num_src_entries, Dy
 }
 
 static bool
+db_load_indexes(FILE *fp, GList **indexes) {
+    uint32_t num_indexes = 0;
+    if (!read_element_from_file(&num_indexes, 4, fp)) {
+        return false;
+    }
+
+    for (uint32_t i = 0; i < num_indexes; i++) {
+        uint8_t type = 0;
+        if (!read_element_from_file(&type, 1, fp)) {
+            g_list_free_full(*indexes, (GDestroyNotify)fsearch_index_free);
+            *indexes = NULL;
+            return false;
+        }
+
+        uint32_t path_len = 0;
+        if (!read_element_from_file(&path_len, 4, fp)) {
+            g_list_free_full(*indexes, (GDestroyNotify)fsearch_index_free);
+            *indexes = NULL;
+            return false;
+        }
+
+        g_autofree char *path = calloc(path_len + 1, 1);
+        if (!path) {
+            g_list_free_full(*indexes, (GDestroyNotify)fsearch_index_free);
+            *indexes = NULL;
+            return false;
+        }
+        if (!read_element_from_file(path, path_len, fp)) {
+            g_list_free_full(*indexes, (GDestroyNotify)fsearch_index_free);
+            *indexes = NULL;
+            return false;
+        }
+
+        uint8_t enabled = 0;
+        if (!read_element_from_file(&enabled, 1, fp)) {
+            g_list_free_full(*indexes, (GDestroyNotify)fsearch_index_free);
+            *indexes = NULL;
+            return false;
+        }
+
+        uint8_t update = 0;
+        if (!read_element_from_file(&update, 1, fp)) {
+            g_list_free_full(*indexes, (GDestroyNotify)fsearch_index_free);
+            *indexes = NULL;
+            return false;
+        }
+
+        uint8_t one_filesystem = 0;
+        if (!read_element_from_file(&one_filesystem, 1, fp)) {
+            g_list_free_full(*indexes, (GDestroyNotify)fsearch_index_free);
+            *indexes = NULL;
+            return false;
+        }
+
+        uint64_t last_updated = 0;
+        if (!read_element_from_file(&last_updated, 8, fp)) {
+            g_list_free_full(*indexes, (GDestroyNotify)fsearch_index_free);
+            *indexes = NULL;
+            return false;
+        }
+
+        FsearchIndex *index = fsearch_index_new((FsearchIndexType)type,
+                                                path,
+                                                (bool)enabled,
+                                                (bool)update,
+                                                (bool)one_filesystem,
+                                                (time_t)last_updated);
+        *indexes = g_list_append(*indexes, index);
+    }
+
+    return true;
+}
+
+static bool
 db_load_sorted_arrays(FILE *fp, DynamicArray **sorted_folders, DynamicArray **sorted_files) {
     uint32_t num_sorted_arrays = 0;
 
@@ -620,11 +694,15 @@ db_load(FsearchDatabase *db, const char *file_path, void (*status_cb)(const char
     }
     g_debug("[db_load] folder size: %" PRIu64 ", file size: %" PRIu64, folder_block_size, file_block_size);
 
-    // TODO: implement index loading
-    uint32_t num_indexes = 0;
-    if (!read_element_from_file(&num_indexes, 4, fp)) {
+    GList *indexes = NULL;
+    if (!db_load_indexes(fp, &indexes)) {
+        g_debug("[db_load] failed to load indexes");
         goto load_fail;
     }
+    if (db->indexes) {
+        g_list_free_full(g_steal_pointer(&db->indexes), (GDestroyNotify)fsearch_index_free);
+    }
+    db->indexes = indexes;
 
     // TODO: implement exclude loading
     uint32_t num_excludes = 0;
@@ -957,13 +1035,64 @@ static size_t
 db_save_indexes(FILE *fp, FsearchDatabase *db, bool *write_failed) {
     size_t bytes_written = 0;
 
-    // TODO: actually implement storing all index information
-    const uint32_t num_indexes = 0;
+    const uint32_t num_indexes = g_list_length(db->indexes);
     bytes_written += write_data_to_file(fp, &num_indexes, 4, 1, write_failed);
     if (*write_failed == true) {
         g_debug("[db_save] failed to save number of indexes: %d", num_indexes);
         goto out;
     }
+
+    for (GList *l = db->indexes; l != NULL; l = l->next) {
+        FsearchIndex *index = l->data;
+
+        // Type
+        const uint8_t type = index->type;
+        bytes_written += write_data_to_file(fp, &type, 1, 1, write_failed);
+        if (*write_failed) {
+            goto out;
+        }
+
+        // Path
+        const uint32_t path_len = strlen(index->path);
+        bytes_written += write_data_to_file(fp, &path_len, 4, 1, write_failed);
+        if (*write_failed) {
+            goto out;
+        }
+
+        bytes_written += write_data_to_file(fp, index->path, path_len, 1, write_failed);
+        if (*write_failed) {
+            goto out;
+        }
+
+        // Enabled
+        const uint8_t enabled = index->enabled;
+        bytes_written += write_data_to_file(fp, &enabled, 1, 1, write_failed);
+        if (*write_failed) {
+            goto out;
+        }
+
+        // Update
+        const uint8_t update = index->update;
+        bytes_written += write_data_to_file(fp, &update, 1, 1, write_failed);
+        if (*write_failed) {
+            goto out;
+        }
+
+        // One Filesystem
+        const uint8_t one_filesystem = index->one_filesystem;
+        bytes_written += write_data_to_file(fp, &one_filesystem, 1, 1, write_failed);
+        if (*write_failed) {
+            goto out;
+        }
+
+        // Last Updated
+        const uint64_t last_updated = (uint64_t)index->last_updated;
+        bytes_written += write_data_to_file(fp, &last_updated, 8, 1, write_failed);
+        if (*write_failed) {
+            goto out;
+        }
+    }
+
 out:
     return bytes_written;
 }
@@ -1611,6 +1740,12 @@ FsearchThreadPool *
 db_get_thread_pool(FsearchDatabase *db) {
     g_assert(db);
     return db->thread_pool;
+}
+
+GList *
+db_get_indexes(FsearchDatabase *db) {
+    g_assert(db);
+    return db->indexes;
 }
 
 bool
