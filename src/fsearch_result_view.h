@@ -10,6 +10,12 @@ typedef struct {
     GHashTable *row_cache;
     GHashTable *pixbuf_cache;
     GHashTable *app_gicon_cache;
+    GHashTable *file_existence_cache;
+
+    GThreadPool *check_pool;
+    GAsyncQueue *results_queue;
+    guint idle_id;
+    GMutex idle_mutex;
 
     // remember the row height from the last draw call
     // when it changes we need to reset the icon cache
