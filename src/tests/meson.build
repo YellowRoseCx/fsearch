@@ -1,4 +1,5 @@
 test_array = executable('test_array', 'test_array.c', dependencies: libfsearch_dep)
+test_database = executable('test_database', 'test_database.c', dependencies: libfsearch_dep)
 test_query = executable('test_query', 'test_query.c', dependencies: libfsearch_dep)
 test_size_utils = executable('test_size_utils', 'test_size_utils.c', dependencies: libfsearch_dep)
 test_string_utils = executable('test_string_utils', 'test_string_utils.c', dependencies: libfsearch_dep)
