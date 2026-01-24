@@ -113,3 +113,6 @@ db_get_folders_sorted(FsearchDatabase *db, FsearchDatabaseIndexType sort_type);
 
 DynamicArray *
 db_get_files_sorted(FsearchDatabase *db, FsearchDatabaseIndexType sort_type);
+
+GList *
+db_get_excludes(FsearchDatabase *db);

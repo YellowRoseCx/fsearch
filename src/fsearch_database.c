@@ -677,8 +677,54 @@ db_load(FsearchDatabase *db, const char *file_path, void (*status_cb)(const char
         goto load_fail;
     }
 
-    if (!db_load_excludes(fp, db, num_excludes)) {
-        goto load_fail;
+    if (num_excludes > 0) {
+        GList *loaded_excludes = NULL;
+        for (uint32_t i = 0; i < num_excludes; i++) {
+            uint32_t len = 0;
+            if (!read_element_from_file(&len, 4, fp)) {
+                g_list_free_full(loaded_excludes, (GDestroyNotify)fsearch_exclude_path_free);
+                goto load_fail;
+            }
+
+            char *path = malloc(len + 1);
+            if (!path) {
+                g_list_free_full(loaded_excludes, (GDestroyNotify)fsearch_exclude_path_free);
+                goto load_fail;
+            }
+
+            if (len > 0) {
+                if (!read_element_from_file(path, len, fp)) {
+                    free(path);
+                    g_list_free_full(loaded_excludes, (GDestroyNotify)fsearch_exclude_path_free);
+                    goto load_fail;
+                }
+            }
+            path[len] = '\0';
+
+            uint8_t enabled = 0;
+            if (!read_element_from_file(&enabled, 1, fp)) {
+                free(path);
+                g_list_free_full(loaded_excludes, (GDestroyNotify)fsearch_exclude_path_free);
+                goto load_fail;
+            }
+
+            FsearchExcludePath *ep = fsearch_exclude_path_new(path, (bool)enabled);
+            free(path);
+            loaded_excludes = g_list_prepend(loaded_excludes, ep);
+        }
+        loaded_excludes = g_list_reverse(loaded_excludes);
+
+        if (db->excludes) {
+            g_list_free_full(g_steal_pointer(&db->excludes), (GDestroyNotify)fsearch_exclude_path_free);
+        }
+        g_clear_pointer(&db->excludes_hashtable, g_hash_table_destroy);
+
+        db->excludes = loaded_excludes;
+        db->excludes_hashtable = g_hash_table_new(g_str_hash, g_str_equal);
+        for (GList *l = db->excludes; l != NULL; l = l->next) {
+            FsearchExcludePath *exclude_path = l->data;
+            g_hash_table_insert(db->excludes_hashtable, exclude_path->path, exclude_path);
+        }
     }
 
     // pre-allocate the folders array so we can later map parent indices to the corresponding pointers
@@ -1029,31 +1075,28 @@ db_save_excludes(FILE *fp, FsearchDatabase *db, bool *write_failed) {
     }
 
     for (GList *l = db->excludes; l != NULL; l = l->next) {
-        FsearchExcludePath *exclude = l->data;
+        FsearchExcludePath *ep = l->data;
+        if (!ep || !ep->path) {
+            continue;
+        }
 
-        const uint32_t path_len = strlen(exclude->path);
-        bytes_written += write_data_to_file(fp, &path_len, 4, 1, write_failed);
+        const uint32_t len = strlen(ep->path);
+        bytes_written += write_data_to_file(fp, &len, 4, 1, write_failed);
         if (*write_failed == true) {
-            g_debug("[db_save] failed to save exclude path length");
             goto out;
         }
 
-        if (path_len > 0) {
-            bytes_written += write_data_to_file(fp, exclude->path, path_len, 1, write_failed);
-            if (*write_failed == true) {
-                g_debug("[db_save] failed to save exclude path");
-                goto out;
-            }
+        bytes_written += write_data_to_file(fp, ep->path, 1, len, write_failed);
+        if (*write_failed == true) {
+            goto out;
         }
 
-        const uint8_t enabled = exclude->enabled ? 1 : 0;
+        const uint8_t enabled = ep->enabled ? 1 : 0;
         bytes_written += write_data_to_file(fp, &enabled, 1, 1, write_failed);
         if (*write_failed == true) {
-            g_debug("[db_save] failed to save exclude enabled flag");
             goto out;
         }
     }
-
 out:
     return bytes_written;
 }
@@ -1679,6 +1722,12 @@ DynamicArray *
 db_get_files(FsearchDatabase *db) {
     g_assert(db);
     return db_get_files_sorted(db, DATABASE_INDEX_TYPE_NAME);
+}
+
+GList *
+db_get_excludes(FsearchDatabase *db) {
+    g_assert(db);
+    return db->excludes;
 }
 
 DynamicArray *

@@ -1,61 +1,73 @@
 #include <glib.h>
+#include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
 #include <unistd.h>
-#include "../fsearch_database.h"
-#include "../fsearch_exclude_path.h"
+
+#include <src/fsearch_database.h>
+#include <src/fsearch_exclude_path.h>
 
 static void
-test_save_load_excludes(void) {
-    // 1. Create a DB with excludes
-    GList *excludes = NULL;
-    excludes = g_list_append(excludes, fsearch_exclude_path_new("/tmp/exclude1", true));
-    excludes = g_list_append(excludes, fsearch_exclude_path_new("/tmp/exclude2", false));
-
-    FsearchDatabase *db = db_new(NULL, excludes, NULL, false);
-    g_list_free_full(excludes, (GDestroyNotify)fsearch_exclude_path_free);
-
-    // Verify initial state
-    GList *db_excludes = db_get_excludes(db);
-    g_assert_cmpint(g_list_length(db_excludes), ==, 2);
-
-    // 2. Save DB
+test_db_excludes_persistence(void) {
     char *tmp_dir = g_dir_make_tmp("fsearch_test_XXXXXX", NULL);
     g_assert_nonnull(tmp_dir);
 
-    g_assert_true(db_save(db, tmp_dir));
+    // Create excludes list
+    GList *excludes = NULL;
+    excludes = g_list_append(excludes, fsearch_exclude_path_new("/tmp/foo", true));
+    excludes = g_list_append(excludes, fsearch_exclude_path_new("/tmp/bar", false));
+    excludes = g_list_append(excludes, fsearch_exclude_path_new("/home/user/test", true));
+
+    // Create DB with excludes
+    FsearchDatabase *db = db_new(NULL, excludes, NULL, false);
+    g_assert_nonnull(db);
+
+    // Save DB
+    bool save_res = db_save(db, tmp_dir);
+    g_assert_true(save_res);
 
     db_unref(db);
+    // excludes list is copied by db_new, so we need to free our local list
+    g_list_free_full(excludes, (GDestroyNotify)fsearch_exclude_path_free);
 
-    // 3. Load DB into new object
-    // Initialize with NO excludes
-    db = db_new(NULL, NULL, NULL, false);
+    // Create new empty DB
+    FsearchDatabase *new_db = db_new(NULL, NULL, NULL, false);
+    g_assert_nonnull(new_db);
 
-    // Construct full path
+    // Load DB
     char *db_path = g_build_filename(tmp_dir, "fsearch.db", NULL);
+    bool load_res = db_load(new_db, db_path, NULL);
+    g_assert_true(load_res);
 
-    // db_load takes full path
-    g_assert_true(db_load(db, db_path, NULL));
+    // Check excludes
+    GList *loaded_excludes = db_get_excludes(new_db);
+    g_assert_cmpint(g_list_length(loaded_excludes), ==, 3);
 
-    // 4. Verify excludes are loaded
-    db_excludes = db_get_excludes(db);
+    // Verify content (order should be preserved because db_new sorts them? No, db_new sorts them!)
+    // db_new does: db->excludes = g_list_sort(db->excludes, (GCompareFunc)compare_exclude_path);
+    // compare_exclude_path compares paths.
 
-    g_assert_cmpint(g_list_length(db_excludes), ==, 2);
+    // "/home/user/test" comes first
+    FsearchExcludePath *ep0 = g_list_nth_data(loaded_excludes, 0);
+    g_assert_cmpstr(ep0->path, ==, "/home/user/test");
+    g_assert_true(ep0->enabled);
 
-    // Iterate and check values. db_new sorts them.
-    FsearchExcludePath *ex1 = g_list_nth_data(db_excludes, 0);
-    FsearchExcludePath *ex2 = g_list_nth_data(db_excludes, 1);
+    // "/tmp/bar"
+    FsearchExcludePath *ep1 = g_list_nth_data(loaded_excludes, 1);
+    g_assert_cmpstr(ep1->path, ==, "/tmp/bar");
+    g_assert_false(ep1->enabled);
 
-    // Sort order depends on path
-    g_assert_cmpstr(ex1->path, ==, "/tmp/exclude1");
-    g_assert_true(ex1->enabled);
+    // "/tmp/foo"
+    FsearchExcludePath *ep2 = g_list_nth_data(loaded_excludes, 2);
+    g_assert_cmpstr(ep2->path, ==, "/tmp/foo");
+    g_assert_true(ep2->enabled);
 
-    g_assert_cmpstr(ex2->path, ==, "/tmp/exclude2");
-    g_assert_false(ex2->enabled);
-
-    db_unref(db);
+    // Cleanup
+    db_unref(new_db);
     g_free(db_path);
 
-    // cleanup tmp dir
+    // Remove temporary directory and files
     char *db_file = g_build_filename(tmp_dir, "fsearch.db", NULL);
     unlink(db_file);
     g_free(db_file);
@@ -66,6 +78,6 @@ test_save_load_excludes(void) {
 int
 main(int argc, char *argv[]) {
     g_test_init(&argc, &argv, NULL);
-    g_test_add_func("/FSearch/database/save_load_excludes", test_save_load_excludes);
+    g_test_add_func("/FSearch/database/excludes_persistence", test_db_excludes_persistence);
     return g_test_run();
 }
