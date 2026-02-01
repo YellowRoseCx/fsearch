@@ -69,7 +69,6 @@ struct FsearchDatabase {
 
     GList *indexes;
     GList *excludes;
-    GHashTable *excludes_hashtable;
     char **exclude_files;
 
     bool exclude_hidden;
@@ -1162,13 +1161,16 @@ file_is_excluded(const char *name, char **exclude_files) {
 }
 
 static bool
-directory_is_excluded(const char *name, GHashTable *excludes) {
-    if (!excludes) {
-        return false;
-    }
-    FsearchExcludePath *fs_path = g_hash_table_lookup(excludes, name);
-    if (fs_path) {
-        return fs_path->enabled;
+directory_is_excluded(const char *name, GList *excludes) {
+    while (excludes) {
+        FsearchExcludePath *fs_path = excludes->data;
+        if (!strcmp(name, fs_path->path)) {
+            if (fs_path->enabled) {
+                return true;
+            }
+            return false;
+        }
+        excludes = excludes->next;
     }
     return false;
 }
@@ -1262,7 +1264,7 @@ db_folder_scan_recursive(DatabaseWalkContext *walk_context, FsearchDatabaseEntry
         }
 
         const bool is_dir = S_ISDIR(st.st_mode);
-        if (is_dir && directory_is_excluded(path->str, db->excludes_hashtable)) {
+        if (is_dir && directory_is_excluded(path->str, db->excludes)) {
             g_debug("[db_scan] excluded directory: %s", path->str);
             continue;
         }
@@ -1384,11 +1386,6 @@ db_new(GList *indexes, GList *excludes, char **exclude_files, bool exclude_hidde
     if (excludes) {
         db->excludes = g_list_copy_deep(excludes, (GCopyFunc)fsearch_exclude_path_copy, NULL);
         db->excludes = g_list_sort(db->excludes, (GCompareFunc)compare_exclude_path);
-        db->excludes_hashtable = g_hash_table_new(g_str_hash, g_str_equal);
-        for (GList *l = db->excludes; l != NULL; l = l->next) {
-            FsearchExcludePath *exclude_path = l->data;
-            g_hash_table_insert(db->excludes_hashtable, exclude_path->path, exclude_path);
-        }
     }
     if (exclude_files) {
         db->exclude_files = g_strdupv(exclude_files);
@@ -1430,7 +1427,6 @@ db_free(FsearchDatabase *db) {
     if (db->indexes) {
         g_list_free_full(g_steal_pointer(&db->indexes), (GDestroyNotify)fsearch_index_free);
     }
-    g_clear_pointer(&db->excludes_hashtable, g_hash_table_destroy);
     if (db->excludes) {
         g_list_free_full(g_steal_pointer(&db->excludes), (GDestroyNotify)fsearch_exclude_path_free);
     }
