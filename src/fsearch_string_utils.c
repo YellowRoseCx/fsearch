@@ -41,7 +41,20 @@ fsearch_string_is_empty(const char *str) {
 bool
 fsearch_string_is_ascii_icase(const char *str) {
     g_assert(str);
-    return g_str_is_ascii(str);
+    const gssize str_len = (gssize)strlen(str);
+    if (str_len == 0) {
+        return true;
+    }
+    g_autofree char *down = g_utf8_strdown(str, str_len);
+    g_autofree char *up = g_utf8_strup(str, str_len);
+
+    if (g_str_is_ascii(down) && g_str_is_ascii(up)) {
+        return true;
+    }
+    else {
+        g_debug("[non_ascii_string] \"%s\" (down: \"%s\", up: \"%s\")", str, down, up);
+        return false;
+    }
 }
 
 bool

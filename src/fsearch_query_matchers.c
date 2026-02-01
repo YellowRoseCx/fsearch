@@ -328,13 +328,13 @@ fsearch_query_matcher_highlight_ascii(FsearchQueryNode *node, FsearchQueryMatchD
         return 0;
     }
     if (search_in_path) {
-        const size_t needle_len = node->needle_len;
+        const size_t needle_len = strlen(node->needle);
         add_path_highlight(match_data, dest - haystack, needle_len);
     }
     else {
         PangoAttribute *pa = pango_attr_weight_new(PANGO_WEIGHT_BOLD);
         pa->start_index = dest - haystack;
-        pa->end_index = pa->start_index + node->needle_len;
+        pa->end_index = pa->start_index + strlen(node->needle);
         fsearch_query_match_data_add_highlight(match_data, pa, DATABASE_INDEX_TYPE_NAME);
     }
     return 1;

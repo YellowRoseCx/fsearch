@@ -27,69 +27,10 @@ get_icon_size_for_height(int32_t height) {
     return 48;
 }
 
-#define FILE_STATUS_MISSING 1
-#define FILE_STATUS_EXISTS 2
-#define FILE_STATUS_UNKNOWN 3
-
-typedef struct {
-    char *path;
-    gboolean exists;
-} AsyncResult;
-
-static void
-async_result_free(AsyncResult *res) {
-    g_free(res->path);
-    g_free(res);
-}
-
-static gboolean
-process_results_idle(gpointer user_data) {
-    FsearchResultView *view = user_data;
-    g_mutex_lock(&view->idle_mutex);
-    view->idle_id = 0;
-    g_mutex_unlock(&view->idle_mutex);
-
-    AsyncResult *res = NULL;
-    while ((res = g_async_queue_try_pop(view->results_queue))) {
-        gpointer new_status = GINT_TO_POINTER(res->exists ? FILE_STATUS_EXISTS : FILE_STATUS_MISSING);
-        g_hash_table_insert(view->file_existence_cache, res->path, new_status);
-        res->path = NULL;
-        async_result_free(res);
-    }
-
-    if (view->list_view) {
-        gtk_widget_queue_draw(GTK_WIDGET(view->list_view));
-    }
-
-    return G_SOURCE_REMOVE;
-}
-
-static void
-check_file_existence_thread(gpointer data, gpointer user_data) {
-    char *path = data;
-    FsearchResultView *view = user_data;
-
-    struct stat buffer;
-    gboolean exists = (lstat(path, &buffer) == 0);
-
-    AsyncResult *res = g_new(AsyncResult, 1);
-    res->path = path; // take ownership
-    res->exists = exists;
-
-    g_async_queue_push(view->results_queue, res);
-
-    g_mutex_lock(&view->idle_mutex);
-    if (view->idle_id == 0) {
-        view->idle_id = g_idle_add(process_results_idle, view);
-    }
-    g_mutex_unlock(&view->idle_mutex);
-}
-
 static void
 reset_icon_caches(FsearchResultView *result_view) {
     g_hash_table_remove_all(result_view->pixbuf_cache);
     g_hash_table_remove_all(result_view->app_gicon_cache);
-    g_hash_table_remove_all(result_view->file_existence_cache);
 }
 
 static void
@@ -100,9 +41,6 @@ maybe_reset_icon_caches(FsearchResultView *result_view) {
     }
     if (g_hash_table_size(result_view->app_gicon_cache) > cached_icon_limit) {
         g_hash_table_remove_all(result_view->app_gicon_cache);
-    }
-    if (g_hash_table_size(result_view->file_existence_cache) > 20000) {
-        g_hash_table_remove_all(result_view->file_existence_cache);
     }
 }
 
@@ -167,20 +105,8 @@ get_icon_surface(FsearchResultView *result_view,
     maybe_reset_icon_caches(result_view);
 
     g_autoptr(GIcon) icon = NULL;
-
-    gpointer status_ptr = g_hash_table_lookup(result_view->file_existence_cache, path);
-    int status = GPOINTER_TO_INT(status_ptr);
-
-    if (status == 0) {
-        g_hash_table_insert(result_view->file_existence_cache, g_strdup(path), GINT_TO_POINTER(FILE_STATUS_UNKNOWN));
-        g_thread_pool_push(result_view->check_pool, g_strdup(path), NULL);
-        status = FILE_STATUS_EXISTS;
-    }
-    else if (status == FILE_STATUS_UNKNOWN) {
-        status = FILE_STATUS_EXISTS;
-    }
-
-    if (status == FILE_STATUS_MISSING) {
+    struct stat buffer;
+    if (lstat(path, &buffer)) {
         icon = g_themed_icon_new("edit-delete");
     }
     else if (type == DATABASE_ENTRY_TYPE_FILE && fsearch_file_utils_is_desktop_file(path)) {
@@ -568,38 +494,13 @@ fsearch_result_view_new(void) {
     result_view->pixbuf_cache =
         g_hash_table_new_full(g_icon_hash, (GEqualFunc)g_icon_equal, g_object_unref, g_object_unref);
     result_view->app_gicon_cache = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_object_unref);
-    result_view->file_existence_cache = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
-
-    g_mutex_init(&result_view->idle_mutex);
-    result_view->results_queue = g_async_queue_new();
-    result_view->check_pool = g_thread_pool_new(check_file_existence_thread, result_view, 4, FALSE, NULL);
-
     return result_view;
 }
 
 void
 fsearch_result_view_free(FsearchResultView *result_view) {
-    // Stop threads and wait for them to finish
-    g_thread_pool_free(result_view->check_pool, TRUE, TRUE);
-
-    g_mutex_lock(&result_view->idle_mutex);
-    if (result_view->idle_id) {
-        g_source_remove(result_view->idle_id);
-        result_view->idle_id = 0;
-    }
-    g_mutex_unlock(&result_view->idle_mutex);
-
-    // Free remaining items in queue
-    AsyncResult *res = NULL;
-    while ((res = g_async_queue_try_pop(result_view->results_queue))) {
-        async_result_free(res);
-    }
-    g_async_queue_unref(result_view->results_queue);
-    g_mutex_clear(&result_view->idle_mutex);
-
     g_clear_pointer(&result_view->pixbuf_cache, g_hash_table_unref);
     g_clear_pointer(&result_view->app_gicon_cache, g_hash_table_unref);
-    g_clear_pointer(&result_view->file_existence_cache, g_hash_table_unref);
     g_clear_pointer(&result_view->row_cache, g_hash_table_unref);
     g_clear_pointer(&result_view, free);
 }
