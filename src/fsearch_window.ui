@@ -206,6 +206,34 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
+            <property name="action-name">win.show_sidebar</property>
+            <property name="text" translatable="yes">Show Sidebar</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">7</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkModelButton">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="receives-default">True</property>
+            <property name="action-name">win.view_mode_icon</property>
+            <property name="text" translatable="yes">Icon View</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">8</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkModelButton">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="receives-default">True</property>
             <property name="action-name">win.show_filter</property>
             <property name="text" translatable="yes">Show Filter</property>
           </object>
@@ -526,18 +554,69 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
                 <property name="visible">True</property>
                 <property name="can-focus">False</property>
                 <child>
-                  <object class="GtkScrolledWindow" id="listview_scrolled_window">
-                    <property name="width-request">-1</property>
-                    <property name="height-request">-1</property>
+                  <object class="GtkPaned" id="main_paned">
                     <property name="visible">True</property>
                     <property name="can-focus">True</property>
-                    <property name="shadow-type">in</property>
+                    <property name="position">200</property>
                     <child>
-                      <placeholder/>
+                      <object class="GtkScrolledWindow" id="sidebar_scrolled_window">
+                        <property name="visible">True</property>
+                        <property name="can-focus">True</property>
+                        <property name="shadow-type">in</property>
+                        <child>
+                          <placeholder/>
+                        </child>
+                      </object>
+                      <packing>
+                        <property name="resize">False</property>
+                        <property name="shrink">False</property>
+                      </packing>
                     </child>
-                    <style>
-                      <class name="results_frame"/>
-                    </style>
+                    <child>
+                      <object class="GtkStack" id="view_mode_stack">
+                        <property name="visible">True</property>
+                        <property name="can-focus">False</property>
+                        <child>
+                          <object class="GtkScrolledWindow" id="listview_scrolled_window">
+                            <property name="width-request">-1</property>
+                            <property name="height-request">-1</property>
+                            <property name="visible">True</property>
+                            <property name="can-focus">True</property>
+                            <property name="shadow-type">in</property>
+                            <child>
+                              <placeholder/>
+                            </child>
+                            <style>
+                              <class name="results_frame"/>
+                            </style>
+                          </object>
+                          <packing>
+                            <property name="name">list</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkScrolledWindow" id="iconview_scrolled_window">
+                            <property name="visible">True</property>
+                            <property name="can-focus">True</property>
+                            <property name="shadow-type">in</property>
+                            <child>
+                              <object class="GtkIconView" id="result_icon_view">
+                                <property name="visible">True</property>
+                                <property name="can-focus">True</property>
+                                <property name="margin">6</property>
+                              </object>
+                            </child>
+                          </object>
+                          <packing>
+                            <property name="name">icon</property>
+                          </packing>
+                        </child>
+                      </object>
+                      <packing>
+                        <property name="resize">True</property>
+                        <property name="shrink">False</property>
+                      </packing>
+                    </child>
                   </object>
                   <packing>
                     <property name="index">-1</property>

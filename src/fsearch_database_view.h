@@ -56,6 +56,9 @@ db_view_set_query_text(FsearchDatabaseView *view, const char *query_text);
 void
 db_view_set_sort_order(FsearchDatabaseView *view, FsearchDatabaseIndexType sort_order, GtkSortType sort_type);
 
+void
+db_view_set_parent_filter(FsearchDatabaseView *view, FsearchDatabaseEntryFolder *parent);
+
 // NOTE: Getters are not thread save, they need to be wrapped with db_view_lock/db_view_unlock
 uint32_t
 db_view_get_num_folders(FsearchDatabaseView *view);

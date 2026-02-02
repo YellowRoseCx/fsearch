@@ -747,6 +747,26 @@ fsearch_window_action_show_statusbar(GSimpleAction *action, GVariant *variant, g
 }
 
 static void
+fsearch_window_action_show_sidebar(GSimpleAction *action, GVariant *variant, gpointer user_data) {
+    FsearchApplicationWindow *self = user_data;
+    g_simple_action_set_state(action, variant);
+    gboolean show = g_variant_get_boolean(variant);
+    fsearch_window_show_sidebar(self, show);
+}
+
+static void
+fsearch_window_action_view_mode_icon(GSimpleAction *action, GVariant *variant, gpointer user_data) {
+    FsearchApplicationWindow *self = user_data;
+    fsearch_window_set_view_mode_icon(self);
+}
+
+static void
+fsearch_window_action_view_mode_list(GSimpleAction *action, GVariant *variant, gpointer user_data) {
+    FsearchApplicationWindow *self = user_data;
+    fsearch_window_set_view_mode_list(self);
+}
+
+static void
 fsearch_window_action_search_in_path(GSimpleAction *action, GVariant *variant, gpointer user_data) {
     FsearchApplicationWindow *self = user_data;
     g_simple_action_set_state(action, variant);
@@ -923,6 +943,9 @@ static GActionEntry FsearchWindowActions[] = {
     {"show_statusbar", action_toggle_state_cb, NULL, "true", fsearch_window_action_show_statusbar},
     {"show_filter", action_toggle_state_cb, NULL, "true", fsearch_window_action_show_filter},
     {"show_search_button", action_toggle_state_cb, NULL, "true", fsearch_window_action_show_search_button},
+    {"show_sidebar", action_toggle_state_cb, NULL, "true", fsearch_window_action_show_sidebar},
+    {"view_mode_icon", fsearch_window_action_view_mode_icon},
+    {"view_mode_list", fsearch_window_action_view_mode_list},
     // Search
     {"search_in_path", action_toggle_state_cb, NULL, "true", fsearch_window_action_search_in_path},
     {"search_mode", action_toggle_state_cb, NULL, "true", fsearch_window_action_search_mode},
@@ -970,6 +993,9 @@ fsearch_window_actions_update(FsearchApplicationWindow *self) {
     action_set_enabled(group, "show_statusbar", TRUE);
     action_set_enabled(group, "show_filter", TRUE);
     action_set_enabled(group, "show_search_button", TRUE);
+    action_set_enabled(group, "show_sidebar", TRUE);
+    action_set_enabled(group, "view_mode_icon", TRUE);
+    action_set_enabled(group, "view_mode_list", TRUE);
     action_set_enabled(group, "show_name_column", FALSE);
     action_set_enabled(group, "show_path_column", TRUE);
     action_set_enabled(group, "show_type_column", TRUE);
