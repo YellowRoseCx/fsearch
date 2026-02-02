@@ -36,9 +36,6 @@
 #include "fsearch_ui_utils.h"
 #include "fsearch_window.h"
 #include "fsearch_window_actions.h"
-#include "fsearch_sidebar.h"
-#include "fsearch_folder_tree_model.h"
-#include "fsearch_list_model.h"
 #include <glib/gi18n.h>
 
 struct _FsearchApplicationWindow {
@@ -65,12 +62,6 @@ struct _FsearchApplicationWindow {
     GtkWidget *main_database_overlay_stack;
     GtkWidget *main_result_overlay;
     GtkWidget *main_search_overlay_stack;
-
-    GtkWidget *sidebar_scrolled_window;
-    GtkWidget *view_mode_stack;
-    GtkWidget *iconview_scrolled_window;
-    GtkWidget *result_icon_view;
-    FsearchSidebar *sidebar;
 
     GtkWidget *statusbar;
 
@@ -823,19 +814,7 @@ on_database_update_finished(gpointer data, gpointer user_data) {
 
     FsearchDatabase *db = fsearch_application_get_db(FSEARCH_APPLICATION_DEFAULT);
 
-    if (win->sidebar) {
-        FsearchFolderTreeModel *model = fsearch_folder_tree_model_new(db);
-        gtk_tree_view_set_model(GTK_TREE_VIEW(win->sidebar), GTK_TREE_MODEL(model));
-        g_object_unref(model);
-    }
-
     db_view_register_database(win->result_view->database_view, db);
-
-    if (win->result_icon_view) {
-        FsearchListModel *list_model = fsearch_list_model_new(win->result_view->database_view);
-        gtk_icon_view_set_model(GTK_ICON_VIEW(win->result_icon_view), GTK_TREE_MODEL(list_model));
-        g_object_unref(list_model);
-    }
 
     g_clear_pointer(&db, db_unref);
 }
@@ -857,45 +836,6 @@ on_database_scan_started(gpointer data, gpointer user_data) {
 }
 
 static void
-on_sidebar_folder_selected(FsearchSidebar *sidebar, FsearchDatabaseEntryFolder *folder, gpointer user_data) {
-    FsearchApplicationWindow *win = user_data;
-    if (win->result_view && win->result_view->database_view) {
-        db_view_set_parent_filter(win->result_view->database_view, folder);
-    }
-}
-
-static void
-fsearch_application_window_init_sidebar(FsearchApplicationWindow *win) {
-    FsearchDatabase *db = fsearch_application_get_db(FSEARCH_APPLICATION_DEFAULT);
-    FsearchFolderTreeModel *model = fsearch_folder_tree_model_new(db);
-    win->sidebar = FSEARCH_SIDEBAR(fsearch_sidebar_new(model));
-    gtk_container_add(GTK_CONTAINER(win->sidebar_scrolled_window), GTK_WIDGET(win->sidebar));
-    gtk_widget_show(GTK_WIDGET(win->sidebar));
-
-    g_signal_connect(win->sidebar, "folder-selected", G_CALLBACK(on_sidebar_folder_selected), win);
-
-    g_object_unref(model);
-    if(db) db_unref(db);
-}
-
-static void
-fsearch_application_window_init_iconview(FsearchApplicationWindow *win) {
-    GtkIconView *icon_view = GTK_ICON_VIEW(win->result_icon_view);
-    gtk_icon_view_set_item_orientation(icon_view, GTK_ORIENTATION_VERTICAL);
-    gtk_icon_view_set_columns(icon_view, -1);
-    gtk_icon_view_set_item_width(icon_view, 80);
-
-    GtkCellRenderer *pixbuf_renderer = gtk_cell_renderer_pixbuf_new();
-    gtk_cell_layout_pack_start(GTK_CELL_LAYOUT(icon_view), pixbuf_renderer, FALSE);
-    gtk_cell_layout_add_attribute(GTK_CELL_LAYOUT(icon_view), pixbuf_renderer, "gicon", FSEARCH_LIST_MODEL_COL_ICON);
-
-    GtkCellRenderer *text_renderer = gtk_cell_renderer_text_new();
-    g_object_set(text_renderer, "alignment", PANGO_ALIGN_CENTER, "wrap-mode", PANGO_WRAP_WORD_CHAR, "wrap-width", 80, NULL);
-    gtk_cell_layout_pack_start(GTK_CELL_LAYOUT(icon_view), text_renderer, TRUE);
-    gtk_cell_layout_add_attribute(GTK_CELL_LAYOUT(icon_view), text_renderer, "text", FSEARCH_LIST_MODEL_COL_NAME);
-}
-
-static void
 fsearch_application_window_init(FsearchApplicationWindow *self) {
     g_assert(FSEARCH_IS_APPLICATION_WINDOW(self));
 
@@ -908,8 +848,6 @@ fsearch_application_window_init(FsearchApplicationWindow *self) {
 
     fsearch_window_actions_init(self);
     fsearch_application_window_init_listview(self);
-    fsearch_application_window_init_sidebar(self);
-    fsearch_application_window_init_iconview(self);
     fsearch_application_window_init_overlays(self);
 
     FsearchApplication *app = FSEARCH_APPLICATION_DEFAULT;
@@ -1027,12 +965,6 @@ fsearch_window_db_view_content_changed_cb(gpointer data) {
     fsearch_window_db_view_apply_changes(win);
     fsearch_window_actions_update(win);
 
-    if (win->result_icon_view) {
-        FsearchListModel *list_model = fsearch_list_model_new(win->result_view->database_view);
-        gtk_icon_view_set_model(GTK_ICON_VIEW(win->result_icon_view), GTK_TREE_MODEL(list_model));
-        g_object_unref(list_model);
-    }
-
     db_view_lock(win->result_view->database_view);
     const uint32_t num_rows = is_empty_search(win) ? 0 : db_view_get_num_entries(win->result_view->database_view);
     db_view_unlock(win->result_view->database_view);
@@ -1103,10 +1035,6 @@ fsearch_application_window_class_init(FsearchApplicationWindowClass *klass) {
     gtk_widget_class_bind_template_child(widget_class, FsearchApplicationWindow, search_box);
     gtk_widget_class_bind_template_child(widget_class, FsearchApplicationWindow, search_button_revealer);
     gtk_widget_class_bind_template_child(widget_class, FsearchApplicationWindow, search_entry);
-    gtk_widget_class_bind_template_child(widget_class, FsearchApplicationWindow, sidebar_scrolled_window);
-    gtk_widget_class_bind_template_child(widget_class, FsearchApplicationWindow, view_mode_stack);
-    gtk_widget_class_bind_template_child(widget_class, FsearchApplicationWindow, iconview_scrolled_window);
-    gtk_widget_class_bind_template_child(widget_class, FsearchApplicationWindow, result_icon_view);
 
     gtk_widget_class_bind_template_callback(widget_class, on_filter_combobox_changed);
     gtk_widget_class_bind_template_callback(widget_class, on_fsearch_window_delete_event);
@@ -1458,17 +1386,4 @@ FsearchApplicationWindow *
 fsearch_application_window_new(FsearchApplication *app) {
     g_assert(FSEARCH_IS_APPLICATION(app));
     return g_object_new(FSEARCH_APPLICATION_WINDOW_TYPE, "application", app, NULL);
-}
-
-void fsearch_window_show_sidebar(FsearchApplicationWindow *win, gboolean show) {
-    if (show) gtk_widget_show(win->sidebar_scrolled_window);
-    else gtk_widget_hide(win->sidebar_scrolled_window);
-}
-
-void fsearch_window_set_view_mode_icon(FsearchApplicationWindow *win) {
-    gtk_stack_set_visible_child_name(GTK_STACK(win->view_mode_stack), "icon");
-}
-
-void fsearch_window_set_view_mode_list(FsearchApplicationWindow *win) {
-    gtk_stack_set_visible_child_name(GTK_STACK(win->view_mode_stack), "list");
 }

@@ -42,8 +42,6 @@ struct FsearchDatabaseView {
     FsearchDatabaseViewNotifyFunc notify_func;
     gpointer notify_func_data;
 
-    FsearchDatabaseEntryFolder *parent_filter;
-
     GMutex mutex;
 
     volatile int ref_count;
@@ -53,7 +51,6 @@ typedef struct {
     FsearchDatabaseView *view;
     FsearchDatabase *db;
     FsearchQuery *query;
-    FsearchDatabaseEntryFolder *parent_filter;
     FsearchDatabaseIndexType sort_order;
     bool reset_selection;
 } FsearchSearchContext;
@@ -574,31 +571,16 @@ db_view_search_task(gpointer data, GCancellable *cancellable) {
     DynamicArray *files = NULL;
     DynamicArray *folders = NULL;
 
-    if (ctx->parent_filter) {
-        files = db_get_children_files(ctx->db, ctx->parent_filter);
-        folders = db_get_children_folders(ctx->db, ctx->parent_filter);
+    db_lock(ctx->db);
+    db_get_entries_sorted(ctx->db, ctx->sort_order, &sort_order, &folders, &files);
 
-        db_lock(ctx->db);
-        if (fsearch_query_matches_everything(ctx->query)) {
-            result = db_search_empty(folders, files, DATABASE_INDEX_TYPE_NAME);
-        }
-        else {
-            result = db_search(ctx->query, ctx->view->pool, folders, files, sort_order, cancellable);
-        }
-        db_unlock(ctx->db);
+    if (fsearch_query_matches_everything(ctx->query)) {
+        result = db_search_empty(folders, files, sort_order);
     }
     else {
-        db_lock(ctx->db);
-        db_get_entries_sorted(ctx->db, ctx->sort_order, &sort_order, &folders, &files);
-
-        if (fsearch_query_matches_everything(ctx->query)) {
-            result = db_search_empty(folders, files, sort_order);
-        }
-        else {
-            result = db_search(ctx->query, ctx->view->pool, folders, files, sort_order, cancellable);
-        }
-        db_unlock(ctx->db);
+        result = db_search(ctx->query, ctx->view->pool, folders, files, sort_order, cancellable);
     }
+    db_unlock(ctx->db);
 
     g_clear_pointer(&files, darray_unref);
     g_clear_pointer(&folders, darray_unref);
@@ -631,7 +613,6 @@ db_view_search(FsearchDatabaseView *view, bool reset_selection) {
     ctx->db = db_ref(view->db);
     ctx->sort_order = view->sort_order;
     ctx->reset_selection = reset_selection;
-    ctx->parent_filter = view->parent_filter;
 
     g_autoptr(GString) query_id = g_string_new(NULL);
     g_string_printf(query_id, "query:%02d.%04d", view->id, view->query_id++);
@@ -659,17 +640,6 @@ db_view_set_filters(FsearchDatabaseView *view, FsearchFilterManager *filters) {
 
     db_view_search(view, true);
 
-    db_view_unlock(view);
-}
-
-void
-db_view_set_parent_filter(FsearchDatabaseView *view, FsearchDatabaseEntryFolder *parent) {
-    if (!view) {
-        return;
-    }
-    db_view_lock(view);
-    view->parent_filter = parent;
-    db_view_search(view, true);
     db_view_unlock(view);
 }
 

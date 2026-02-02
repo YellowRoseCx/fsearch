@@ -76,9 +76,6 @@ struct FsearchDatabase {
 
     volatile int ref_count;
 
-    GHashTable *cached_folder_children;
-    GHashTable *cached_folder_files;
-
     GMutex mutex;
 };
 
@@ -1437,9 +1434,6 @@ db_free(FsearchDatabase *db) {
     g_clear_pointer(&db->exclude_files, g_strfreev);
     g_clear_pointer(&db->thread_pool, fsearch_thread_pool_free);
 
-    if (db->cached_folder_children) g_hash_table_unref(db->cached_folder_children);
-    if (db->cached_folder_files) g_hash_table_unref(db->cached_folder_files);
-
     db_unlock(db);
 
     g_mutex_clear(&db->mutex);
@@ -1619,9 +1613,6 @@ bool
 db_scan(FsearchDatabase *db, GCancellable *cancellable, void (*status_cb)(const char *)) {
     g_assert(db);
 
-    g_clear_pointer(&db->cached_folder_children, g_hash_table_unref);
-    g_clear_pointer(&db->cached_folder_files, g_hash_table_unref);
-
     bool ret = false;
 
     db_sorted_entries_free(db);
@@ -1677,70 +1668,4 @@ db_unref(FsearchDatabase *db) {
     if (g_atomic_int_dec_and_test(&db->ref_count)) {
         g_clear_pointer(&db, db_free);
     }
-}
-
-static void
-build_children_cache(FsearchDatabase *db) {
-    if (db->cached_folder_children) return;
-
-    db->cached_folder_children = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, (GDestroyNotify)darray_unref);
-    db->cached_folder_files = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, (GDestroyNotify)darray_unref);
-
-    // Scan folders
-    DynamicArray *all_folders = db->sorted_folders[DATABASE_INDEX_TYPE_NAME];
-    if (all_folders) {
-        const uint32_t num_folders = darray_get_num_items(all_folders);
-        for (uint32_t i = 0; i < num_folders; i++) {
-            FsearchDatabaseEntry *entry = darray_get_item(all_folders, i);
-            FsearchDatabaseEntryFolder *parent = db_entry_get_parent(entry);
-            DynamicArray *list = g_hash_table_lookup(db->cached_folder_children, parent);
-            if (!list) {
-                list = darray_new(16);
-                g_hash_table_insert(db->cached_folder_children, parent, list);
-            }
-            darray_add_item(list, entry);
-        }
-    }
-
-    // Scan files
-    DynamicArray *all_files = db->sorted_files[DATABASE_INDEX_TYPE_NAME];
-    if (all_files) {
-        const uint32_t num_files = darray_get_num_items(all_files);
-        for (uint32_t i = 0; i < num_files; i++) {
-            FsearchDatabaseEntry *entry = darray_get_item(all_files, i);
-            FsearchDatabaseEntryFolder *parent = db_entry_get_parent(entry);
-            DynamicArray *list = g_hash_table_lookup(db->cached_folder_files, parent);
-            if (!list) {
-                list = darray_new(16);
-                g_hash_table_insert(db->cached_folder_files, parent, list);
-            }
-            darray_add_item(list, entry);
-        }
-    }
-}
-
-DynamicArray *
-db_get_children_folders(FsearchDatabase *db, FsearchDatabaseEntryFolder *parent) {
-    g_assert(db);
-    db_lock(db);
-    if (!db->cached_folder_children) {
-        build_children_cache(db);
-    }
-    DynamicArray *res = g_hash_table_lookup(db->cached_folder_children, parent);
-    DynamicArray *ret = res ? darray_copy(res) : darray_new(0);
-    db_unlock(db);
-    return ret;
-}
-
-DynamicArray *
-db_get_children_files(FsearchDatabase *db, FsearchDatabaseEntryFolder *parent) {
-    g_assert(db);
-    db_lock(db);
-    if (!db->cached_folder_files) {
-        build_children_cache(db);
-    }
-    DynamicArray *res = g_hash_table_lookup(db->cached_folder_files, parent);
-    DynamicArray *ret = res ? darray_copy(res) : darray_new(0);
-    db_unlock(db);
-    return ret;
 }

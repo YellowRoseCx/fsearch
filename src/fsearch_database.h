@@ -28,7 +28,6 @@
 #include <stdint.h>
 
 typedef struct FsearchDatabase FsearchDatabase;
-typedef struct FsearchDatabaseEntryFolder FsearchDatabaseEntryFolder;
 
 bool
 db_register_view(FsearchDatabase *db, gpointer view);
@@ -86,12 +85,6 @@ db_get_folders(FsearchDatabase *db);
 
 DynamicArray *
 db_get_files(FsearchDatabase *db);
-
-DynamicArray *
-db_get_children_folders(FsearchDatabase *db, FsearchDatabaseEntryFolder *parent);
-
-DynamicArray *
-db_get_children_files(FsearchDatabase *db, FsearchDatabaseEntryFolder *parent);
 
 FsearchThreadPool *
 db_get_thread_pool(FsearchDatabase *db);

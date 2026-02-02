@@ -105,9 +105,4 @@ fsearch_application_window_selection_for_each(FsearchApplicationWindow *self, GH
 
 void
 fsearch_application_window_toggle_app_menu(FsearchApplicationWindow *self);
-
-void fsearch_window_show_sidebar(FsearchApplicationWindow *win, gboolean show);
-void fsearch_window_set_view_mode_icon(FsearchApplicationWindow *win);
-void fsearch_window_set_view_mode_list(FsearchApplicationWindow *win);
-
 G_END_DECLS
