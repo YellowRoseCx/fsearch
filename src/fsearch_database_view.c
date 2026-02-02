@@ -262,6 +262,8 @@ db_view_new(const char *query_text,
     view->sort_order = sort_order;
     view->sort_type = sort_type;
 
+    view->parent_filter = NULL;
+
     view->notify_func = notify_func;
     view->notify_func_data = notify_func_data;
 
@@ -575,6 +577,10 @@ db_view_search_task(gpointer data, GCancellable *cancellable) {
     DynamicArray *folders = NULL;
 
     if (ctx->parent_filter) {
+        if (!ctx->db) {
+            g_clear_pointer(&ctx, search_context_free);
+            return NULL;
+        }
         files = db_get_children_files(ctx->db, ctx->parent_filter);
         folders = db_get_children_folders(ctx->db, ctx->parent_filter);
 

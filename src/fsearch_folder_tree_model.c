@@ -58,6 +58,8 @@ fsearch_folder_tree_model_get_column_type(GtkTreeModel *tree_model, gint index) 
 static gboolean
 fsearch_folder_tree_model_get_iter(GtkTreeModel *tree_model, GtkTreeIter *iter, GtkTreePath *path) {
     FsearchFolderTreeModel *self = FSEARCH_FOLDER_TREE_MODEL(tree_model);
+    if (!self->db) return FALSE;
+
     gint *indices = gtk_tree_path_get_indices(path);
     gint depth = gtk_tree_path_get_depth(path);
 
@@ -89,6 +91,7 @@ fsearch_folder_tree_model_get_iter(GtkTreeModel *tree_model, GtkTreeIter *iter, 
 static GtkTreePath *
 fsearch_folder_tree_model_get_path(GtkTreeModel *tree_model, GtkTreeIter *iter) {
     FsearchFolderTreeModel *self = FSEARCH_FOLDER_TREE_MODEL(tree_model);
+    if (!self->db) return NULL;
     g_return_val_if_fail(iter->stamp == self->stamp, NULL);
 
     FsearchDatabaseEntryFolder *folder = iter->user_data;
@@ -126,6 +129,7 @@ fsearch_folder_tree_model_get_path(GtkTreeModel *tree_model, GtkTreeIter *iter) 
 static void
 fsearch_folder_tree_model_get_value(GtkTreeModel *tree_model, GtkTreeIter *iter, gint column, GValue *value) {
     FsearchFolderTreeModel *self = FSEARCH_FOLDER_TREE_MODEL(tree_model);
+    if (!self->db) return;
     g_return_if_fail(iter->stamp == self->stamp);
     FsearchDatabaseEntryFolder *folder = iter->user_data;
 
@@ -143,6 +147,7 @@ fsearch_folder_tree_model_get_value(GtkTreeModel *tree_model, GtkTreeIter *iter,
 static gboolean
 fsearch_folder_tree_model_iter_next(GtkTreeModel *tree_model, GtkTreeIter *iter) {
     FsearchFolderTreeModel *self = FSEARCH_FOLDER_TREE_MODEL(tree_model);
+    if (!self->db) return FALSE;
     g_return_val_if_fail(iter->stamp == self->stamp, FALSE);
 
     FsearchDatabaseEntryFolder *folder = iter->user_data;
@@ -174,6 +179,7 @@ fsearch_folder_tree_model_iter_next(GtkTreeModel *tree_model, GtkTreeIter *iter)
 static gboolean
 fsearch_folder_tree_model_iter_children(GtkTreeModel *tree_model, GtkTreeIter *iter, GtkTreeIter *parent) {
     FsearchFolderTreeModel *self = FSEARCH_FOLDER_TREE_MODEL(tree_model);
+    if (!self->db) return FALSE;
 
     FsearchDatabaseEntryFolder *parent_folder = NULL;
     if (parent) {
@@ -195,6 +201,7 @@ fsearch_folder_tree_model_iter_children(GtkTreeModel *tree_model, GtkTreeIter *i
 static gboolean
 fsearch_folder_tree_model_iter_has_child(GtkTreeModel *tree_model, GtkTreeIter *iter) {
     FsearchFolderTreeModel *self = FSEARCH_FOLDER_TREE_MODEL(tree_model);
+    if (!self->db) return FALSE;
     g_return_val_if_fail(iter->stamp == self->stamp, FALSE);
 
     FsearchDatabaseEntryFolder *folder = iter->user_data;
@@ -204,6 +211,7 @@ fsearch_folder_tree_model_iter_has_child(GtkTreeModel *tree_model, GtkTreeIter *
 static gint
 fsearch_folder_tree_model_iter_n_children(GtkTreeModel *tree_model, GtkTreeIter *iter) {
     FsearchFolderTreeModel *self = FSEARCH_FOLDER_TREE_MODEL(tree_model);
+    if (!self->db) return 0;
 
     if (!iter) {
         // Root children count
@@ -221,6 +229,7 @@ fsearch_folder_tree_model_iter_n_children(GtkTreeModel *tree_model, GtkTreeIter 
 static gboolean
 fsearch_folder_tree_model_iter_nth_child(GtkTreeModel *tree_model, GtkTreeIter *iter, GtkTreeIter *parent, gint n) {
     FsearchFolderTreeModel *self = FSEARCH_FOLDER_TREE_MODEL(tree_model);
+    if (!self->db) return FALSE;
 
     FsearchDatabaseEntryFolder *parent_folder = NULL;
     if (parent) {
@@ -242,6 +251,7 @@ fsearch_folder_tree_model_iter_nth_child(GtkTreeModel *tree_model, GtkTreeIter *
 static gboolean
 fsearch_folder_tree_model_iter_parent(GtkTreeModel *tree_model, GtkTreeIter *iter, GtkTreeIter *child) {
     FsearchFolderTreeModel *self = FSEARCH_FOLDER_TREE_MODEL(tree_model);
+    if (!self->db) return FALSE;
     g_return_val_if_fail(child->stamp == self->stamp, FALSE);
 
     FsearchDatabaseEntryFolder *folder = child->user_data;
