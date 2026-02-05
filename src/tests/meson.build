@@ -4,9 +4,17 @@ test_size_utils = executable('test_size_utils', 'test_size_utils.c', dependencie
 test_string_utils = executable('test_string_utils', 'test_string_utils.c', dependencies: libfsearch_dep)
 test_time_utils = executable('test_time_utils', 'test_time_utils.c', dependencies: libfsearch_dep)
 test_database = executable('test_database', 'test_database.c', dependencies: libfsearch_dep)
+test_database_include_change = executable('test_database_include_change', 'test_database_include_change.c', dependencies: libfsearch_dep)
 
 test('test_array',
      test_array,
+     env: [
+       'G_TEST_SRCDIR=@0@'.format(meson.current_source_dir()),
+       'G_TEST_BUILDDIR=@0@'.format(meson.current_build_dir()),
+     ],
+)
+test('test_database_include_change',
+     test_database_include_change,
      env: [
        'G_TEST_SRCDIR=@0@'.format(meson.current_source_dir()),
        'G_TEST_BUILDDIR=@0@'.format(meson.current_build_dir()),

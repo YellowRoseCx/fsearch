@@ -1724,12 +1724,6 @@ db_get_files(FsearchDatabase *db) {
     return db_get_files_sorted(db, DATABASE_INDEX_TYPE_NAME);
 }
 
-GList *
-db_get_excludes(FsearchDatabase *db) {
-    g_assert(db);
-    return db->excludes;
-}
-
 DynamicArray *
 db_get_folders(FsearchDatabase *db) {
     g_assert(db);
